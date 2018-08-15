@@ -99,165 +99,161 @@ class ReplayMemory():
                                 self.transitions.max)  # Store new transition with maximum priority
         self.t = 0 if terminal else self.t + 1  # Start new episodes with t = 0
 
+    # Returns a transition with blank states where appropriate
+    def _get_transition(self, idx):
+        """
 
-# Returns a transition with blank states where appropriate
-def _get_transition(self, idx):
-    """
+        Args:
+            self:
+            idx:
 
-    Args:
-        self:
-        idx:
+        Returns:
 
-    Returns:
+        """
+        transition = [None] * (self.history + self.n)
+        transition[self.history - 1] = self.transitions.get(idx)
+        for t in range(self.history - 2, -1, -1):  # e.g. 2 1 0
+            if transition[t + 1].timestep == 0:
+                transition[t] = blank_trans  # If future frame has timestep 0
+            else:
+                transition[t] = self.transitions.get(idx - self.history + 1 + t)
+        for t in range(self.history, self.history + self.n):  # e.g. 4 5 6
+            if transition[t - 1].nonterminal:
+                transition[t] = self.transitions.get(idx - self.history + 1 + t)
+            else:
+                transition[t] = blank_trans  # If prev (next) frame is terminal
+        return transition
 
-    """
-    transition = [None] * (self.history + self.n)
-    transition[self.history - 1] = self.transitions.get(idx)
-    for t in range(self.history - 2, -1, -1):  # e.g. 2 1 0
-        if transition[t + 1].timestep == 0:
-            transition[t] = blank_trans  # If future frame has timestep 0
-        else:
-            transition[t] = self.transitions.get(idx - self.history + 1 + t)
-    for t in range(self.history, self.history + self.n):  # e.g. 4 5 6
-        if transition[t - 1].nonterminal:
-            transition[t] = self.transitions.get(idx - self.history + 1 + t)
-        else:
-            transition[t] = blank_trans  # If prev (next) frame is terminal
-    return transition
+    # Returns a valid sample from a segment
+    def _get_sample_from_segment(self, segment, i):
+        """
 
+        Args:
+            self:
+            segment:
+            i:
 
-# Returns a valid sample from a segment
-def _get_sample_from_segment(self, segment, i):
-    """
+        Returns:
 
-    Args:
-        self:
-        segment:
-        i:
+        """
+        valid = False
+        while not valid:
+            sample = random.uniform(i * segment, (i + 1) * segment)  # Uniformly sample an element from within a segment
+            prob, idx, tree_idx = self.transitions.find(
+                sample)  # Retrieve sample from tree with un-normalised probability
+            # Resample if transition straddled current index or probablity 0
+            if (self.transitions.index - idx) % self.capacity > self.n and (
+                    idx - self.transitions.index) % self.capacity >= self.history and prob != 0:
+                valid = True  # Note that conditions are valid but extra conservative around buffer index 0
 
-    Returns:
+        # Retrieve all required transition data (from t - h to t + n)
+        transition = self._get_transition(idx)
+        # Create un-discretised state and nth next state
+        state = torch.stack([trans.state for trans in transition[:self.history]]).to(dtype=torch.float32,
+                                                                                     device=self.device).div_(255)
+        next_state = torch.stack([trans.state for trans in transition[self.n:self.n + self.history]]).to(
+            dtype=torch.float32, device=self.device).div_(255)
+        # Discrete action to be used as index
+        action = torch.tensor([transition[self.history - 1].action], dtype=torch.int64, device=self.device)
+        # Calculate truncated n-step discounted return R^n = Σ_k=0->n-1 (γ^k)R_t+k+1 (note that invalid nth next states have reward 0)
+        R = torch.tensor([sum(self.discount ** n * transition[self.history + n - 1].reward for n in range(self.n))],
+                         dtype=torch.float32, device=self.device)
+        # Mask for non-terminal nth next states
+        nonterminal = torch.tensor([transition[self.history + self.n - 1].nonterminal], dtype=torch.float32,
+                                   device=self.device)
 
-    """
-    valid = False
-    while not valid:
-        sample = random.uniform(i * segment, (i + 1) * segment)  # Uniformly sample an element from within a segment
-        prob, idx, tree_idx = self.transitions.find(sample)  # Retrieve sample from tree with un-normalised probability
-        # Resample if transition straddled current index or probablity 0
-        if (self.transitions.index - idx) % self.capacity > self.n and (
-                idx - self.transitions.index) % self.capacity >= self.history and prob != 0:
-            valid = True  # Note that conditions are valid but extra conservative around buffer index 0
+        return prob, idx, tree_idx, state, action, R, next_state, nonterminal
 
-    # Retrieve all required transition data (from t - h to t + n)
-    transition = self._get_transition(idx)
-    # Create un-discretised state and nth next state
-    state = torch.stack([trans.state for trans in transition[:self.history]]).to(dtype=torch.float32,
-                                                                                 device=self.device).div_(255)
-    next_state = torch.stack([trans.state for trans in transition[self.n:self.n + self.history]]).to(
-        dtype=torch.float32, device=self.device).div_(255)
-    # Discrete action to be used as index
-    action = torch.tensor([transition[self.history - 1].action], dtype=torch.int64, device=self.device)
-    # Calculate truncated n-step discounted return R^n = Σ_k=0->n-1 (γ^k)R_t+k+1 (note that invalid nth next states have reward 0)
-    R = torch.tensor([sum(self.discount ** n * transition[self.history + n - 1].reward for n in range(self.n))],
-                     dtype=torch.float32, device=self.device)
-    # Mask for non-terminal nth next states
-    nonterminal = torch.tensor([transition[self.history + self.n - 1].nonterminal], dtype=torch.float32,
-                               device=self.device)
+    def sample(self, batch_size):
+        """Important sampling weight
 
-    return prob, idx, tree_idx, state, action, R, next_state, nonterminal
+        initial importance sampling weight	- B0 is 0.4
+        Final importance sampling weight 	- Bf is 1
 
-
-def sample(self, batch_size):
-    """Important sampling weight
-
-    initial importance sampling weight	- B0 is 0.4
-    Final importance sampling weight 	- Bf is 1
-
-    Importance sampling weight value is annealed from 0.4 to 1 over course of training
-    ,which will erase the biae of training
+        Importance sampling weight value is annealed from 0.4 to 1 over course of training
+        ,which will erase the biae of training
 
 
-    For Example
-    if Q-learning will be trained by large TD-error,
-    Q-function will not be convergence. Because of large gradient magnitude.
+        For Example
+        if Q-learning will be trained by large TD-error,
+        Q-function will not be convergence. Because of large gradient magnitude.
 
 
-    if Q-learning will be trained by small TD-error,
-    Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
+        if Q-learning will be trained by small TD-error,
+        Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
 
-    TD-error = R+Q(S,A) -Q(S',A')
-    importance sampling(IS) = (N*P)^(-beta)/max(IS)
-    Q update - (IS)*TD-error
+        TD-error = R+Q(S,A) -Q(S',A')
+        importance sampling(IS) = (N*P)^(-beta)/max(IS)
+        Q update - (IS)*TD-error
 
-    Args:
-        self:
-        batch_size:
+        Args:
+            self:
+            batch_size:
 
-    Returns:
+        Returns:
 
-    """
-    p_total = self.transitions.total()  # Retrieve sum of all priorities (used to create a normalised probability distribution)
-    segment = p_total / batch_size  # Batch size number of segments, based on sum over all probabilities
-    batch = [self._get_sample_from_segment(segment, i) for i in range(batch_size)]  # Get batch of valid samples
-    probs, idxs, tree_idxs, states, actions, returns, next_states, nonterminals = zip(*batch)
-    states, next_states, = torch.stack(states), torch.stack(next_states)
-    actions, returns, nonterminals = torch.cat(actions), torch.cat(returns), torch.stack(nonterminals)
-    probs = torch.tensor(probs, dtype=torch.float32, device=self.device) / p_total  # Calculate normalised probabilities
-    capacity = self.capacity if self.transitions.full else self.transitions.index
-    weights = (capacity * probs) ** -self.priority_weight  # Compute importance-sampling weights w 
-    weights = weights / weights.max()  # Normalise by max importance-sampling weight from batch
-    return tree_idxs, states, actions, returns, next_states, nonterminals, weights
+        """
+        p_total = self.transitions.total()  # Retrieve sum of all priorities (used to create a normalised probability distribution)
+        segment = p_total / batch_size  # Batch size number of segments, based on sum over all probabilities
+        batch = [self._get_sample_from_segment(segment, i) for i in range(batch_size)]  # Get batch of valid samples
+        probs, idxs, tree_idxs, states, actions, returns, next_states, nonterminals = zip(*batch)
+        states, next_states, = torch.stack(states), torch.stack(next_states)
+        actions, returns, nonterminals = torch.cat(actions), torch.cat(returns), torch.stack(nonterminals)
+        probs = torch.tensor(probs, dtype=torch.float32,
+                             device=self.device) / p_total  # Calculate normalised probabilities
+        capacity = self.capacity if self.transitions.full else self.transitions.index
+        weights = (capacity * probs) ** -self.priority_weight  # Compute importance-sampling weights w
+        weights = weights / weights.max()  # Normalise by max importance-sampling weight from batch
+        return tree_idxs, states, actions, returns, next_states, nonterminals, weights
 
+    def update_priorities(self, idxs, priorities):
+        """Stochastic sampling method
 
-def update_priorities(self, idxs, priorities):
-    """Stochastic sampling method
-
-    priority_exponent value is 0.6
-    a stochastic sampling method interpolates between pure greedy prioritization and uniform random sampling
-
-
-    P(i) = p(i)^alpha  / sum( p(i)^(alpha))
-
-    For Example
-    if priority_exponent(alpha) is 0, experience be choosed by uniform random sampling
-
-    if priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
-    Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
-
-    so 0.6 is suitable priority exponent value to sample
-
-    Args:
-        self:
-        idxs:
-        priorities:
-
-    Returns:
-
-    """
-    priorities.pow_(self.priority_exponent)
-    [self.transitions.update(idx, priority) for idx, priority in zip(idxs, priorities)]
+        priority_exponent value is 0.6
+        a stochastic sampling method interpolates between pure greedy prioritization and uniform random sampling
 
 
-# Set up internal state for iterator
-def __iter__(self):
-    self.current_idx = 0
-    return self
+        P(i) = p(i)^alpha  / sum( p(i)^(alpha))
 
+        For Example
+        if priority_exponent(alpha) is 0, experience be choosed by uniform random sampling
 
-# Return valid states for validation
-def __next__(self):
-    if self.current_idx == self.capacity:
-        raise StopIteration
-    # Create stack of states
-    state_stack = [None] * self.history
-    state_stack[-1] = self.transitions.data[self.current_idx].state
-    prev_timestep = self.transitions.data[self.current_idx].timestep
-    for t in reversed(range(self.history - 1)):
-        if prev_timestep == 0:
-            state_stack[t] = blank_trans.state  # If future frame has timestep 0
-        else:
-            state_stack[t] = self.transitions.data[self.current_idx + t - self.history + 1].state
-            prev_timestep -= 1
-    state = torch.stack(state_stack, 0).to(dtype=torch.float32, device=self.device).div_(
-        255)  # Agent will turn into batch
-    self.current_idx += 1
-    return state
+        if priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
+        Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
+
+        so 0.6 is suitable priority exponent value to sample
+
+        Args:
+            self:
+            idxs:
+            priorities:
+
+        Returns:
+
+        """
+        priorities.pow_(self.priority_exponent)
+        [self.transitions.update(idx, priority) for idx, priority in zip(idxs, priorities)]
+
+    # Set up internal state for iterator
+    def __iter__(self):
+        self.current_idx = 0
+        return self
+
+    # Return valid states for validation
+    def __next__(self):
+        if self.current_idx == self.capacity:
+            raise StopIteration
+        # Create stack of states
+        state_stack = [None] * self.history
+        state_stack[-1] = self.transitions.data[self.current_idx].state
+        prev_timestep = self.transitions.data[self.current_idx].timestep
+        for t in reversed(range(self.history - 1)):
+            if prev_timestep == 0:
+                state_stack[t] = blank_trans.state  # If future frame has timestep 0
+            else:
+                state_stack[t] = self.transitions.data[self.current_idx + t - self.history + 1].state
+                prev_timestep -= 1
+        state = torch.stack(state_stack, 0).to(dtype=torch.float32, device=self.device).div_(
+            255)  # Agent will turn into batch
+        self.current_idx += 1
+        return state
