@@ -25,6 +25,8 @@ class SegmentTree():
     if parent != 0:
       self._propagate(parent, value)
 
+
+
   # Updates value given a tree index
   def update(self, index, value):
     self.sum_tree[index] = value  # Set new value
@@ -74,10 +76,23 @@ class ReplayMemory():
     self.transitions = SegmentTree(capacity)  # Store transitions in a wrap-around cyclic buffer within a sum tree for querying priorities
 
   # Adds state and action at time t, reward and terminal at time t + 1
+  
+
   def append(self, state, action, reward, terminal):
     state = state[-1].mul(255).to(dtype=torch.uint8, device=torch.device('cpu'))  # Only store last frame and discretise to save memory
     self.transitions.append(Transition(self.t, state, action, reward, not terminal), self.transitions.max)  # Store new transition with maximum priority
     self.t = 0 if terminal else self.t + 1  # Start new episodes with t = 0
+
+""" New transition with maximum priority 
+The reason why we store new transition with maximum priority is
+to prevent no experience.
+
+if new transition is small transition,
+we always use high td-error memory which make an overfitting 
+
+
+    """
+
 
   # Returns a transition with blank states where appropriate
   def _get_transition(self, idx):
@@ -128,14 +143,54 @@ class ReplayMemory():
     actions, returns, nonterminals = torch.cat(actions), torch.cat(returns), torch.stack(nonterminals)
     probs = torch.tensor(probs, dtype=torch.float32, device=self.device) / p_total  # Calculate normalised probabilities
     capacity = self.capacity if self.transitions.full else self.transitions.index
-    weights = (capacity * probs) ** -self.priority_weight  # Compute importance-sampling weights w
-    weights = weights / weights.max()   # Normalise by max importance-sampling weight from batch
+    weights = (capacity * probs) ** -self.priority_weight  # Compute importance-sampling weights w 
+    weights = weights / weights.max()   # Normalise by max importance-sampling weight from batch 
     return tree_idxs, states, actions, returns, next_states, nonterminals, weights
+ """ Important sampling weight
+
+initial importance sampling weight	- B0 is 0.4
+Final importance sampling weight 	- Bf is 1
+
+Importance sampling weight value is annealed from 0.4 to 1 over course of training 
+,which will erase the biae of training
+
+
+For Example
+if Q-learning will be trained by large TD-error, 
+Q-function will not be convergence. Because of large gradient magnitude.
+
+
+if Q-learning will be trained by small TD-error, 
+Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
+
+TD-error = R+Q(S,A) -Q(S',A')
+importance sampling(IS) = (N*P)^(-beta)/max(IS)
+Q update - (IS)*TD-error
+
+
+    """
 
   def update_priorities(self, idxs, priorities):
     priorities.pow_(self.priority_exponent)
     [self.transitions.update(idx, priority) for idx, priority in zip(idxs, priorities)]
 
+""" stochastic sampling method 
+
+priority_exponent value is 0.6
+a stochastic sampling method interpolates between pure greedy prioritization and uniform random sampling
+
+
+P(i) = p(i)^alpha  / sum( p(i)^(alpha))
+
+For Example
+if priority_exponent(alpha) is 0, experience be choosed by uniform random sampling
+
+if priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
+Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
+
+so 0.6 is suitable priority exponent value to sample
+
+    """
   # Set up internal state for iterator
   def __iter__(self):
     self.current_idx = 0
