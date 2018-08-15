@@ -5,7 +5,7 @@
 - [x] Double DQN [[3]](#references) (김준태님)
 - [x] Prioritised Experience Replay [[4]](#references) (박민철님)
 - [x] Dueling Network Architecture [[5]](#references) (김상근님)
-- [x] Multi-step Returns [[6]](#references) (김건희님)
+- [x] Multi-step Returns [[6]](#references) (건희님)
 - [x] Distributional RL [[7]](#references)
 - [x] Noisy Nets [[8]](#references) (주찬웅님)
  
