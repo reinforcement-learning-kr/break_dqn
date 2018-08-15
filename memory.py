@@ -85,12 +85,10 @@ class ReplayMemory():
         we always use high td-error memory which make an overfitting
 
         Args:
-            state:
-            action:
-            reward:
-            terminal:
-
-        Returns:
+            state: 84x84x4  (length of history is 4)
+            action: stop left right
+            reward: alive score
+            terminal:dead
 
         """
         state = state[-1].mul(255).to(dtype=torch.uint8,
@@ -104,11 +102,15 @@ class ReplayMemory():
         """
 
         Args:
-            self:
-            idx:
+            idx: index number
 
-        Returns:
+        Returns: The seriese of transition data
 
+	Because history length is 4, it has the series of transition data.
+
+	ex)
+	if take a sample from memory, transition has the size of history(4)+ step(n) [n is multi-step size] 
+	if terminal state, return is blank sample
         """
         transition = [None] * (self.history + self.n)
         transition[self.history - 1] = self.transitions.get(idx)
@@ -127,13 +129,12 @@ class ReplayMemory():
     # Returns a valid sample from a segment
     def _get_sample_from_segment(self, segment, i):
         """
-
+	This function make a batch
         Args:
-            self:
-            segment:
-            i:
-
-        Returns:
+            segment: total_experience / batch_size
+		i  : The order of batch.	
+	In order to make batch, this function will be called 32 times.
+	    return : i th element of batch
 
         """
         valid = False
@@ -164,6 +165,8 @@ class ReplayMemory():
 
         return prob, idx, tree_idx, state, action, R, next_state, nonterminal
 
+
+
     def sample(self, batch_size):
         """Important sampling weight
 
@@ -182,15 +185,14 @@ class ReplayMemory():
         if Q-learning will be trained by small TD-error,
         Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
 
-        TD-error = R+Q(S,A) -Q(S',A')
+        TD-error = R+(gamma)xQ(S,A) -Q(S',A')
         importance sampling(IS) = (N*P)^(-beta)/max(IS)
-        Q update - (IS)*TD-error
+        MSE = (IS)*TD-error
 
         Args:
-            self:
-            batch_size:
+            batch_size: 32
 
-        Returns:
+        Returns: results of prioritized sampling
 
         """
         p_total = self.transitions.total()  # Retrieve sum of all priorities (used to create a normalised probability distribution)
@@ -209,7 +211,7 @@ class ReplayMemory():
     def update_priorities(self, idxs, priorities):
         """Stochastic sampling method
 
-        priority_exponent value is 0.6
+        priority_exponent value is 0.5
         a stochastic sampling method interpolates between pure greedy prioritization and uniform random sampling
 
 
@@ -221,15 +223,21 @@ class ReplayMemory():
         if priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
         Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
 
-        so 0.6 is suitable priority exponent value to sample
+        so 0.5 is suitable priority exponent value to sample
 
         Args:
-            self:
-            idxs:
-            priorities:
+            idxs: Total number of transition
+            priorities: prioritization 
+	
+	In per, There is two type of prioritization.
+	first is proportional prioritization where p = TD-error +epsilon 
+	The reason of plus epsilon is to prevent zero
+	
+	second is rank-based prioritization whre p = 1/rank(index)
+	
+	in prioritized experience replay paper, rank-based prioritization is more robust than prioritization
 
-        Returns:
-
+ 
         """
         priorities.pow_(self.priority_exponent)
         [self.transitions.update(idx, priority) for idx, priority in zip(idxs, priorities)]
