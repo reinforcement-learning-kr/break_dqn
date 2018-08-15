@@ -8,6 +8,15 @@ from model import DQN
 
 class Agent():
   def __init__(self, args, env):
+    """
+    Args:
+      atoms = interval of distribution
+      Vmin = Distribution minimum
+      Vmax = Distribution maximum
+      support = Make distribution
+      delta_z
+
+    """
     self.action_space = env.action_space()
     self.atoms = args.atoms
     self.Vmin = args.V_min
@@ -18,6 +27,7 @@ class Agent():
     self.n = args.multi_step
     self.discount = args.discount
     self.norm_clip = args.norm_clip
+
 
     self.online_net = DQN(args, self.action_space).to(device=args.device)
     if args.model and os.path.isfile(args.model):
@@ -33,20 +43,73 @@ class Agent():
 
     self.optimiser = optim.Adam(self.online_net.parameters(), lr=args.lr, eps=args.adam_eps)
 
-  # Resets noisy weights in all linear layers (of online net only)
+
   def reset_noise(self):
+
+    """
+    Method for reset a noise in network
+
+    return:
+        Resets noisy weights in all linear layers (of online net only)
+    """
     self.online_net.reset_noise()
 
-  # Acts based on single state (no batch)
+
   def act(self, state):
+    """
+
+    Args:
+        state: state
+
+    Returns:/?????
+
+    """
+
     with torch.no_grad():
       return (self.online_net(state.unsqueeze(0)) * self.support).sum(2).argmax(1).item()
 
   # Acts with an ε-greedy policy (used for evaluation only)
-  def act_e_greedy(self, state, epsilon=0.001):  # High ε can reduce evaluation scores drastically
+  def act_e_greedy(self, state, epsilon=0.001): # High ε can reduce evaluation scores drastically
+    """
+    This method for act_e_greedy
+    Args:
+        state: state
+        epsilon: 0.001
+
+    Returns: actiojn value
+
+
+    Notes:
+      According to ε-greedy policy if random-value is smaller than ε-value,
+      choice random action and
+      if ε-value is smaller than random-value,
+      choice action in the trained model
+
+
+    """
     return random.randrange(self.action_space) if random.random() < epsilon else self.act(state)
 
   def learn(self, mem):
+    """This method for learn
+
+    Args:
+        mem: mem
+
+    Returns:
+
+
+
+     Notes:
+         We use Double DQN and C51 method instead of
+         learning by using on network
+
+        Why split the online_net and target_net?
+          double DQN uses two networks
+          online_net quickly updates and creates episodes
+          target_net is to prevent the Q value of on action from becoming too larget while learning slowly
+
+    """
+
     # Sample transitions
     idxs, states, actions, returns, next_states, nonterminals, weights = mem.sample(self.batch_size)
 
@@ -89,19 +152,42 @@ class Agent():
     mem.update_priorities(idxs, loss.detach())  # Update priorities of sampled transitions
 
   def update_target_net(self):
+    """Method for update a target network
+
+    Returns: action_value of state
+    """
     self.target_net.load_state_dict(self.online_net.state_dict())
 
   # Save model parameters on current device (don't move model between devices)
   def save(self, path):
+    """Method for save
+
+    Args:
+        path:path
+
+    Returns: trained model
+
+    """
     torch.save(self.online_net.state_dict(), os.path.join(path, 'model.pth'))
 
   # Evaluates Q-value based on single state (no batch)
   def evaluate_q(self, state):
+    """Method for evaluate a q-value
+    Args:
+      input: state
+    :return:???
+
+    """
     with torch.no_grad():
       return (self.online_net(state.unsqueeze(0)) * self.support).sum(2).max(1)[0].item()
 
   def train(self):
+    """Method for train
+
+    """
     self.online_net.train()
 
   def eval(self):
+    """Method for evaluate
+    """
     self.online_net.eval()
