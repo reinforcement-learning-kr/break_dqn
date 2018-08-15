@@ -10,12 +10,18 @@ from env import Env
 Ts, rewards, Qs, best_avg_reward = [], [], [], -1e10
 
 
-# Test DQN 
-# args:       Arguments using argparser, 
-# T:          The number of step, 
-# dqn:        Agent class instant, 
-# val_mum:    ReplayMemory class instance,
-# evaluation: Argument of evaluate
+""" 
+Test DQN. 
+
+  This function makes the results about average value, which can graphically show using plotly, html files  
+
+Args:
+  args:       Arguments using argparser, 
+  T:          The number of step, 
+  dqn:        Agent class instant, 
+  val_mum:    ReplayMemory class instance,
+  evaluation: Argument of evaluate
+"""
 def test(args, T, dqn, val_mem, evaluate=False):
   global Ts, rewards, Qs, best_avg_reward
   env = Env(args)
