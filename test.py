@@ -10,7 +10,12 @@ from env import Env
 Ts, rewards, Qs, best_avg_reward = [], [], [], -1e10
 
 
-# Test DQN
+# Test DQN 
+# args:       Arguments using argparser, 
+# T:          The number of step, 
+# dqn:        Agent class instant, 
+# val_mum:    ReplayMemory class instance,
+# evaluation: Argument of evaluate
 def test(args, T, dqn, val_mem, evaluate=False):
   global Ts, rewards, Qs, best_avg_reward
   env = Env(args)
@@ -20,7 +25,7 @@ def test(args, T, dqn, val_mem, evaluate=False):
 
   # Test performance over several episodes
   done = True
-  for _ in range(args.evaluation_episodes):
+  for _ in range(args.evaluation_episodes): # argument of evaluation-episodes(default=10) using argparser
     while True:
       if done:
         state, reward_sum, done = env.reset(), 0, False
@@ -32,7 +37,7 @@ def test(args, T, dqn, val_mem, evaluate=False):
         env.render()
 
       if done:
-        T_rewards.append(reward_sum)
+        T_rewards.append(reward_sum)  # Append the sum of rewards to calculate average rewanr and Q
         break
   env.close()
 
@@ -41,6 +46,7 @@ def test(args, T, dqn, val_mem, evaluate=False):
     T_Qs.append(dqn.evaluate_q(state))
 
   avg_reward, avg_Q = sum(T_rewards) / len(T_rewards), sum(T_Qs) / len(T_Qs)
+
   if not evaluate:
     # Append to results
     rewards.append(T_rewards)
@@ -77,3 +83,4 @@ def _plot_line(xs, ys_population, title, path=''):
     'data': [trace_upper, trace_mean, trace_lower, trace_min, trace_max],
     'layout': dict(title=title, xaxis={'title': 'Step'}, yaxis={'title': title})
   }, filename=os.path.join(path, title + '.html'), auto_open=False)
+
