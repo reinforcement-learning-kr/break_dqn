@@ -1,43 +1,73 @@
 from collections import deque
 import random
 import atari_py
-import torch #pytorch version 0.4
-import cv2  # Note that importing cv2 before torch may cause segfaults?
-
-
+import torch
+import cv2
 
 
 class Env():
+  """
+  Env is class for RL trainer
+  This gives an useful function
 
+  def __init__()
+  In this part, we can set about Training Environment
+  Each value for setting Environment is already fixed in args of main.py
+
+  Below functions are involved Env class.
+
+  def _get_state
+  def _reset_buffer
+  def reset
+  def step
+  def train(self):
+  def eval(self):
+  def action_space(self):
+  def render(self):
+  def close(self):
+
+
+
+
+  """
   def __init__(self, args):
-    self.device = args.device # In main.py / args.device = torch.device('cuda') check CPU or GPU
+    self.device = args.device
     self.ale = atari_py.ALEInterface()
-    self.ale.setInt('random_seed', args.seed) #  #random seed value default is 123
+    self.ale.setInt('random_seed', args.seed)
     self.ale.setInt('max_num_frames', args.max_episode_length)
     self.ale.setFloat('repeat_action_probability', 0)  # Disable sticky actions
     self.ale.setInt('frame_skip', 0)
-    self.ale.setBool('color_averaging', False)  # color or gray
+    self.ale.setBool('color_averaging', False)
     self.ale.loadROM(atari_py.get_game_path(args.game))  # ROM loading must be done after setting options
     actions = self.ale.getMinimalActionSet()
-    self.actions = dict([i, e] for i, e in zip(range(len(actions)), actions)) #action value => dictionary
+    self.actions = dict([i, e] for i, e in zip(range(len(actions)), actions))
     self.lives = 0  # Life counter (used in DeepMind training)
     self.life_termination = False  # Used to check if resetting only from loss of life
     self.window = args.history_length  # Number of frames to concatenate
-    self.state_buffer = deque([], maxlen=args.history_length) #make buffer
+    self.state_buffer = deque([], maxlen=args.history_length)
     self.training = True  # Consistent with model training mode
 
   def _get_state(self):
-    state = cv2.resize(self.ale.getScreenGrayscale(), (84, 84), interpolation=cv2.INTER_LINEAR) #input state = 84x84 Gray Screen
-    return torch.tensor(state, dtype=torch.float32, device=self.device).div_(255) # state value type change to Tensor
+    """
+    :return: Game image which is 84x84 size and gray color
+    """
+    state = cv2.resize(self.ale.getScreenGrayscale(), (84, 84), interpolation=cv2.INTER_LINEAR)
+    return torch.tensor(state, dtype=torch.float32, device=self.device).div_(255)
 
   def _reset_buffer(self):
     for _ in range(self.window):
       self.state_buffer.append(torch.zeros(84, 84, device=self.device))
 
-
-
   def reset(self):
+    """
+    game reset fucntion
 
+    reset step varies by life_termination
+
+    But finally return initial state
+
+    :return: initial state
+    """
     if self.life_termination:
       self.life_termination = False  # Reset flag
       self.ale.act(0)  # Use a no-op after loss of life
@@ -50,6 +80,7 @@ class Env():
         self.ale.act(0)  # Assumes raw action 0 is always no-op
         if self.ale.game_over():
           self.ale.reset_game()
+
     # Process and return "initial" state
     observation = self._get_state()
     self.state_buffer.append(observation)
@@ -57,7 +88,15 @@ class Env():
     return torch.stack(list(self.state_buffer), 0)
 
   def step(self, action):
-    # Repeat action 4 times, max pool over last 2 frames
+    """
+    Repeat action 4 times, max pool over last 2 frames
+
+    For take reward from action, we use ale.act() function
+
+    :param action:
+    :return: state, reward, done
+    """
+
     frame_buffer = torch.zeros(2, 84, 84, device=self.device)
     reward, done = 0, False
     for t in range(4):
@@ -93,12 +132,10 @@ class Env():
     return len(self.actions)
 
   def render(self):
-    '''
-
-    Returns: no return value
-    it just show us the game screen.
-
-    '''
+    """
+    if you hope to change render image size, use cv2.resize function
+    :return: None
+    """
     cv2.imshow('screen', self.ale.getScreenRGB()[:, :, ::-1])
     cv2.waitKey(1)
 
