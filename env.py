@@ -1,11 +1,33 @@
 from collections import deque
 import random
 import atari_py
-import torch
-import cv2  # Note that importing cv2 before torch may cause segfaults?
+import torch # pytorch version 0.4
+import cv2
 
 
 class Env():
+  """
+  Env is class for RL trainer
+  This gives an useful function
+
+  def __init__()
+  In this part, we can set about Training Environment
+  Each value for setting Environment is already fixed in args of main.py
+
+  Below functions are involved Env class.
+
+  def _get_state # return 84x84 gray color image 
+  def _reset_buffer # reset buffer
+  def reset # explain below
+  def step # explain below
+  def train(self): # change self.training value to True
+  def eval(self): # change self.training value to False
+  def action_space(self): # return number of action_space 
+  def render(self): # show game image using cv2 
+  def close(self): # close render function's image
+
+
+  """
   def __init__(self, args):
     self.device = args.device
     self.ale = atari_py.ALEInterface()
@@ -24,6 +46,9 @@ class Env():
     self.training = True  # Consistent with model training mode
 
   def _get_state(self):
+    """
+    Return: Game image which is 84x84 size and gray color
+    """
     state = cv2.resize(self.ale.getScreenGrayscale(), (84, 84), interpolation=cv2.INTER_LINEAR)
     return torch.tensor(state, dtype=torch.float32, device=self.device).div_(255)
 
@@ -32,6 +57,15 @@ class Env():
       self.state_buffer.append(torch.zeros(84, 84, device=self.device))
 
   def reset(self):
+    """
+    game reset fucntion
+
+    reset step varies by life_termination
+
+    But finally return initial state
+
+    Return: initial state
+    """
     if self.life_termination:
       self.life_termination = False  # Reset flag
       self.ale.act(0)  # Use a no-op after loss of life
@@ -44,6 +78,7 @@ class Env():
         self.ale.act(0)  # Assumes raw action 0 is always no-op
         if self.ale.game_over():
           self.ale.reset_game()
+
     # Process and return "initial" state
     observation = self._get_state()
     self.state_buffer.append(observation)
@@ -51,7 +86,17 @@ class Env():
     return torch.stack(list(self.state_buffer), 0)
 
   def step(self, action):
-    # Repeat action 4 times, max pool over last 2 frames
+    """
+    Repeat action 4 times, max pool over last 2 frames
+
+    For take reward from action, we use ale.act() function
+
+    Args: 
+        action: action value what we what to do 
+    
+    Return: state, reward, done
+    """
+
     frame_buffer = torch.zeros(2, 84, 84, device=self.device)
     reward, done = 0, False
     for t in range(4):
@@ -87,6 +132,11 @@ class Env():
     return len(self.actions)
 
   def render(self):
+    """
+    if you hope to change render image size, use cv2.resize function
+    
+    Return: None
+    """
     cv2.imshow('screen', self.ale.getScreenRGB()[:, :, ::-1])
     cv2.waitKey(1)
 
