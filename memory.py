@@ -1,13 +1,26 @@
 import random
 from collections import namedtuple
 import torch
-
-Transition = namedtuple('Transition', ('timestep', 'state', 'action', 'reward', 'nonterminal'))
+Transition = namedtuple('Transitselion', ('timestep', 'state', 'action', 'reward', 'nonterminal')) # It is similar with dictionaries. But the difference thing is immutable. 
 blank_trans = Transition(0, torch.zeros(84, 84, dtype=torch.uint8), None, 0, False)
-
+'''
+	Output: Transition(timestep=0, state=tensor([[0, 0, 0,  ..., 0, 0, 0],
+        [0, 0, 0,  ..., 0, 0, 0],
+        [0, 0, 0,  ..., 0, 0, 0],
+        ...,
+        [0, 0, 0,  ..., 0, 0, 0],
+        [0, 0, 0,  ..., 0, 0, 0],
+        [0, 0, 0,  ..., 0, 0, 0]], dtype=torch.uint8), action=None, reward=0, nonterminal=False)
+'''
 
 # Segment tree data structure where parent node values are sum/max of children node values
 class SegmentTree():
+'''
+	To store the experience and sample , we use sum tree structure
+	If we sort all sample according to their priorities and find pick from left to right, it is a terrible efficiency.
+	But if we use sum tree, we don't need to sort array and save time to calculate.
+'''
+
     def __init__(self, size):
         self.index = 0
         self.size = size
@@ -18,9 +31,9 @@ class SegmentTree():
 
     # Propagates value up tree given a tree index
     def _propagate(self, index, value):
-        parent = (index - 1) // 2
-        left, right = 2 * parent + 1, 2 * parent + 2
-        self.sum_tree[parent] = self.sum_tree[left] + self.sum_tree[right]
+        parent = (index - 1) // 2			# if index are 1,2/ 3,4/ 5,6/7,8  .... , parent are 0,1,2,3,....
+        left, right = 2 * parent + 1, 2 * parent + 2	# left is  9 / right = 10
+        self.sum_tree[parent] = self.sum_tree[left] + self.sum_tree[right]	# parent is = left value +right value
         if parent != 0:
             self._propagate(parent, value)
 
@@ -81,15 +94,14 @@ class ReplayMemory():
         The reason why we store new transition with maximum priority is
         to prevent no experience.
 
-        if new transition is small transition,
-        we always use high td-error memory which make an overfitting
+        If new transition is small transition,
+        we always use high TD-error memory which make an overfitting
 
         Args:
             state: 84x84x4  (length of history is 4)
             action: stop left right
             reward: alive score
-            terminal:dead
-
+            terminal: dead
         """
         state = state[-1].mul(255).to(dtype=torch.uint8,
                                       device=torch.device('cpu'))  # Only store last frame and discretise to save memory
@@ -109,8 +121,8 @@ class ReplayMemory():
 	Because history length is 4, it has the series of transition data.
 
 	ex)
-	if take a sample from memory, transition has the size of history(4)+ step(n) [n is multi-step size] 
-	if terminal state, return is blank sample
+	If take a sample from memory, transition has the size of history(4)+ step(n) [n is multi-step size] 
+	If terminal state, return is blank sample
         """
         transition = [None] * (self.history + self.n)
         transition[self.history - 1] = self.transitions.get(idx)
@@ -170,7 +182,7 @@ class ReplayMemory():
     def sample(self, batch_size):
         """Important sampling weight
 
-        initial importance sampling weight	- B0 is 0.4
+        Initial importance sampling weight	- B0 is 0.4
         Final importance sampling weight 	- Bf is 1
 
         Importance sampling weight value is annealed from 0.4 to 1 over course of training
@@ -178,11 +190,11 @@ class ReplayMemory():
 
 
         For Example
-        if Q-learning will be trained by large TD-error,
+        If Q-learning will be trained by large TD-error,
         Q-function will not be convergence. Because of large gradient magnitude.
 
 
-        if Q-learning will be trained by small TD-error,
+        If Q-learning will be trained by small TD-error,
         Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
 
         TD-error = R+(gamma)xQ(S,A) -Q(S',A')
@@ -211,17 +223,17 @@ class ReplayMemory():
     def update_priorities(self, idxs, priorities):
         """Stochastic sampling method
 
-        priority_exponent value is 0.5
-        a stochastic sampling method interpolates between pure greedy prioritization and uniform random sampling
+        Priority_exponent value is 0.5
+        A stochastic sampling method interpolates between pure greedy prioritization and uniform random sampling
 
 
         P(i) = p(i)^alpha  / sum( p(i)^(alpha))
 
         For Example
-        if priority_exponent(alpha) is 0, experience be choosed by uniform random sampling
+        If priority_exponent(alpha) is 0, experience be choosed by uniform random sampling
 
-        if priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
-        Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
+        If priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
+        Q-function will not be update.  Because lack of small TD-error experience and small gradient magnitude don't make Q-function update
 
         so 0.5 is suitable priority exponent value to sample
 
@@ -230,12 +242,12 @@ class ReplayMemory():
             priorities: prioritization 
 	
 	In per, There is two type of prioritization.
-	first is proportional prioritization where p = TD-error +epsilon 
+	First is proportional prioritization where p = TD-error +epsilon 
 	The reason of plus epsilon is to prevent zero
 	
-	second is rank-based prioritization whre p = 1/rank(index)
+	Second is rank-based prioritization whre p = 1/rank(index)
 	
-	in prioritized experience replay paper, rank-based prioritization is more robust than prioritization
+	In prioritized experience replay paper, rank-based prioritization is more robust than prioritization
 
  
         """
