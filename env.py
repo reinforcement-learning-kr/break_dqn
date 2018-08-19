@@ -1,7 +1,7 @@
 from collections import deque
 import random
 import atari_py
-import torch
+import torch # pytorch version 0.4
 import cv2
 
 
@@ -16,15 +16,15 @@ class Env():
 
   Below functions are involved Env class.
 
-  def _get_state
-  def _reset_buffer
-  def reset
-  def step
-  def train(self):
-  def eval(self):
-  def action_space(self):
-  def render(self):
-  def close(self):
+  def _get_state # return 84x84 gray color image 
+  def _reset_buffer # reset buffer
+  def reset # explain below
+  def step # explain below
+  def train(self): # change self.training value to True
+  def eval(self): # change self.training value to False
+  def action_space(self): # return number of action_space 
+  def render(self): # show game image using cv2 
+  def close(self): # close render function's image
 
 
 
