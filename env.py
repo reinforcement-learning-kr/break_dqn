@@ -27,8 +27,6 @@ class Env():
   def close(self): # close render function's image
 
 
-
-
   """
   def __init__(self, args):
     self.device = args.device
@@ -49,7 +47,7 @@ class Env():
 
   def _get_state(self):
     """
-    :return: Game image which is 84x84 size and gray color
+    Return: Game image which is 84x84 size and gray color
     """
     state = cv2.resize(self.ale.getScreenGrayscale(), (84, 84), interpolation=cv2.INTER_LINEAR)
     return torch.tensor(state, dtype=torch.float32, device=self.device).div_(255)
@@ -66,7 +64,7 @@ class Env():
 
     But finally return initial state
 
-    :return: initial state
+    Return: initial state
     """
     if self.life_termination:
       self.life_termination = False  # Reset flag
@@ -93,8 +91,10 @@ class Env():
 
     For take reward from action, we use ale.act() function
 
-    :param action:
-    :return: state, reward, done
+    Args: 
+        action: action value what we what to do 
+    
+    Return: state, reward, done
     """
 
     frame_buffer = torch.zeros(2, 84, 84, device=self.device)
@@ -134,7 +134,8 @@ class Env():
   def render(self):
     """
     if you hope to change render image size, use cv2.resize function
-    :return: None
+    
+    Return: None
     """
     cv2.imshow('screen', self.ale.getScreenRGB()[:, :, ::-1])
     cv2.waitKey(1)
