@@ -3,7 +3,7 @@ from collections import namedtuple
 import torch
 Transition = namedtuple('Transitselion', ('timestep', 'state', 'action', 'reward', 'nonterminal')) 
 blank_trans = Transition(0, torch.zeros(84, 84, dtype=torch.uint8), None, 0, False)
-'''
+    """
 	Output: Transition(timestep=0, state=tensor([[0, 0, 0,  ..., 0, 0, 0],
         [0, 0, 0,  ..., 0, 0, 0],
         [0, 0, 0,  ..., 0, 0, 0],
@@ -11,17 +11,29 @@ blank_trans = Transition(0, torch.zeros(84, 84, dtype=torch.uint8), None, 0, Fal
         [0, 0, 0,  ..., 0, 0, 0],
         [0, 0, 0,  ..., 0, 0, 0],
         [0, 0, 0,  ..., 0, 0, 0]], dtype=torch.uint8), action=None, reward=0, nonterminal=False)
-'''
+    """
 
 # Segment tree data structure where parent node values are sum/max of children node values
 class SegmentTree():
-'''
-	To store the experience and sample , we use Sum-Tree structure
-	If we sort all samples according to their priorities and find pick from left to right, it is a terrible efficiency.
+    """
+	To store the experience and sample the data , we use Sum-Tree structure
+	If we sort all samples according to their priorities and pick from left to right, it is a terrible efficiency.
 	But if we use Sum-Tree, we don't need to sort array and save time to calculate.
-'''
+    """
 
     def __init__(self, size):
+    """ Initialization of Sum-Tree
+        index =  The index of underlying data
+        size  =  The size of underlying data
+        full  =  If capacity is full, full is True 
+        sum_tree = Total data including root and leaf node
+        data  =   Underlying data
+        max   =  maximum value
+
+    Args:
+        size: The size of underlying data
+    """
+
         self.index = 0
         self.size = size
         self.full = False  # Used to track actual capacity
@@ -31,19 +43,46 @@ class SegmentTree():
 
     # Propagates value up tree given a tree index
     def _propagate(self, index, value):
-        parent = (index - 1) // 2			# if index are 1,2/ 3,4/ 5,6/7,8  .... , parent are 0,1,2,3,....
-        left, right = 2 * parent + 1, 2 * parent + 2	# left is  9 / right = 10
-        self.sum_tree[parent] = self.sum_tree[left] + self.sum_tree[right]	# parent is = left value +right value
-        if parent != 0:
+    """ It calculates Sum-Tree structure from leaf node to root node.
+	Equation is
+	parents = child[left]+child[right]
+	It calculates untill parent index number is equal to 0 which means root node.
+    Args:
+        index: Tree index.
+        value: Tree value at Tree index
+    """
+
+        parent = (index - 1) // 2
+        left, right = 2 * parent + 1, 2 * parent + 2
+        self.sum_tree[parent] = self.sum_tree[left] + self.sum_tree[right]	# parent = child[left] +right[right]
+        if parent != 0:								# Untill it arrives at root node, it calculate forever
             self._propagate(parent, value)
 
     # Updates value given a tree index
     def update(self, index, value):
+    """ Set the new data using suM_tree function
+	Rrecalculate tree structure using _propagate function
+	Updata max value using max function
+    Args:
+        index: Tree index 
+        value: Tree value at Tree index
+    """
         self.sum_tree[index] = value  # Set new value
         self._propagate(index, value)  # Propagate value
         self.max = max(value, self.max)
 
     def append(self, data, value):
+    """ Store underlying data in data structure
+	To update value, we have to change from underlying index to total index.
+	Equation is
+	self.index + self.size -1
+	Because total data is underlying data x2 -1
+	And if all data is full, restore from 1 index 
+    Args:
+        data:  Underlying value
+        value: Tree value
+
+    """
         self.data[self.index] = data  # Store data in underlying data structure
         self.update(self.index + self.size - 1, value)  # Update tree
         self.index = (self.index + 1) % self.size  # Update index
@@ -52,6 +91,24 @@ class SegmentTree():
 
     # Searches for the location of a value in sum tree
     def _retrieve(self, index, value):
+    """ Search the location using Sum-Tree structure
+
+        Args:
+            index: Tree index
+	    value: Tree value at Tree index 
+
+	To find underlying data location, compare left with right node value.
+	If left is bigger, just choose left node using retrieve(left,value) function
+	If right is bigger, choose right node and calculate (value - left node value).
+	using retrieve(right, value-sum_tree[left]) function
+
+	When left index number is bigger than the length of total tree,
+	We stop _restrieve and return index.
+
+        Returns: Location of a value in sum tree
+
+    """
+
         left, right = 2 * index + 1, 2 * index + 2
         if left >= len(self.sum_tree):
             return index
@@ -62,15 +119,43 @@ class SegmentTree():
 
     # Searches for a value in sum tree and returns value, data index and tree index
     def find(self, value):
+    """ Searche the data index and tree index 
+	We could know location of value using retrieve(0,value)
+	Because 0 means root node, we could get location.
+
+	Index is underlying data index, so we could calculate 
+	Tree index - size +1 is equal to underlying data index
+
+        Args:
+            index: Tree index
+            value: Tree value at Tree index 
+
+
+        Returns: value at tree index, underlying data index, tree index
+
+    """
         index = self._retrieve(0, value)  # Search for index of item from root
         data_index = index - self.size + 1
         return (self.sum_tree[index], data_index, index)  # Return value, data index, tree index
 
     # Returns data given a data index
     def get(self, data_index):
+    """ Input value is index, return is value.
+	if data_index is above size , get data from start.
+        Args:
+            data_index: underlying data index 
+
+        Returns: underlying data value at data_index
+
+    """
         return self.data[data_index % self.size]
 
     def total(self):
+    """Total function means root node value 
+
+        Returns: Root node value.
+
+    """
         return self.sum_tree[0]
 
 
@@ -234,16 +319,15 @@ class ReplayMemory():
         If priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
         so 0.5 is suitable priority exponent value to sample
 
-
         Args:
             idxs: Total number of transition
-            priorities: prioritization 
+            priorities: prioritization
 
-	In per, There is two type of prioritization.
+	In per, There are two type of prioritization.
 	First is proportional prioritization where p = TD-error +epsilon 
 	The reason of plus epsilon is to prevent zero
 
-	Second is rank-based prioritization whre p = 1/rank(index)
+	Second is rank-based prioritization where p = 1/rank(index)
 	In prioritized experience replay paper, rank-based prioritization is more robust than prioritization
 
 
