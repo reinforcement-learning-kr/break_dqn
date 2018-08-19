@@ -1,7 +1,7 @@
 import random
 from collections import namedtuple
 import torch
-Transition = namedtuple('Transitselion', ('timestep', 'state', 'action', 'reward', 'nonterminal')) # It is similar with dictionaries. But the difference thing is immutable. 
+Transition = namedtuple('Transitselion', ('timestep', 'state', 'action', 'reward', 'nonterminal')) 
 blank_trans = Transition(0, torch.zeros(84, 84, dtype=torch.uint8), None, 0, False)
 '''
 	Output: Transition(timestep=0, state=tensor([[0, 0, 0,  ..., 0, 0, 0],
@@ -16,9 +16,9 @@ blank_trans = Transition(0, torch.zeros(84, 84, dtype=torch.uint8), None, 0, Fal
 # Segment tree data structure where parent node values are sum/max of children node values
 class SegmentTree():
 '''
-	To store the experience and sample , we use sum tree structure
-	If we sort all sample according to their priorities and find pick from left to right, it is a terrible efficiency.
-	But if we use sum tree, we don't need to sort array and save time to calculate.
+	To store the experience and sample , we use Sum-Tree structure
+	If we sort all samples according to their priorities and find pick from left to right, it is a terrible efficiency.
+	But if we use Sum-Tree, we don't need to sort array and save time to calculate.
 '''
 
     def __init__(self, size):
@@ -195,7 +195,7 @@ class ReplayMemory():
 
 
         If Q-learning will be trained by small TD-error,
-        Q-function will not be update.  because lack of small TD-error experience and small gradient magnitude.
+        Q-function will not be update.  Because lack of small TD-error experience and small gradient magnitude don't make Q-function update
 
         TD-error = R+(gamma)xQ(S,A) -Q(S',A')
         importance sampling(IS) = (N*P)^(-beta)/max(IS)
@@ -231,25 +231,22 @@ class ReplayMemory():
 
         For Example
         If priority_exponent(alpha) is 0, experience be choosed by uniform random sampling
-
         If priority_exponent(alpha) is 1, experience be choosed by pure greedy prioritization
-        Q-function will not be update.  Because lack of small TD-error experience and small gradient magnitude don't make Q-function update
-
         so 0.5 is suitable priority exponent value to sample
+
 
         Args:
             idxs: Total number of transition
             priorities: prioritization 
-	
+
 	In per, There is two type of prioritization.
 	First is proportional prioritization where p = TD-error +epsilon 
 	The reason of plus epsilon is to prevent zero
-	
+
 	Second is rank-based prioritization whre p = 1/rank(index)
-	
 	In prioritized experience replay paper, rank-based prioritization is more robust than prioritization
 
- 
+
         """
         priorities.pow_(self.priority_exponent)
         [self.transitions.update(idx, priority) for idx, priority in zip(idxs, priorities)]
